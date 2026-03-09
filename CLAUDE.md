@@ -4,18 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Spring Boot 3.2+ web application using Java 21, part of a Java learning repository (`lesson1/stateful-scanner`). Uses Maven for build management.
+Spring Boot 4.0.3 web application using Java 25 (LTS). Standalone project with its own git repository. Uses Maven with wrapper for build management.
 
 ## Build and Run Commands
 
 ```bash
-# Build the project (from project root: lesson1/stateful-scanner/)
-./mvnw clean package
+# Build and run tests
+./mvnw clean install
 
 # Run the application
 ./mvnw spring-boot:run
 
-# Run tests
+# Run tests only
 ./mvnw test
 
 # Run a single test class
@@ -23,14 +23,18 @@ Spring Boot 3.2+ web application using Java 21, part of a Java learning reposito
 
 # Run a single test method
 ./mvnw test -Dtest=ClassName#methodName
-
-# Skip tests during build
-./mvnw package -DskipTests
 ```
 
 ## Code Conventions
 
-- Package naming: `com.samuil.statefulscanner` (consistent with parent repo pattern `com.samuil.<taskname>`)
-- Java 21 features encouraged (records, sealed classes, pattern matching, virtual threads)
-- Spring Boot 3.2+ conventions (constructor injection, `@RestController`, `application.properties` or `application.yml`)
-- Standard Maven directory layout: `src/main/java`, `src/main/resources`, `src/test/java`
+- Package: `com.statefulscanner` — all components go in this package or sub-packages
+- Java 25 features encouraged (records, sealed classes, pattern matching, virtual threads)
+- Spring Boot 4.x conventions (constructor injection, `@RestController`, `application.yml`)
+- H2 in-memory database for development (runtime scope)
+
+## Dependencies
+
+- `spring-boot-starter-web` — Spring MVC + embedded Tomcat + Jackson
+- `spring-boot-starter-data-jpa` — Hibernate + Spring Data JPA
+- `spring-boot-starter-test` — JUnit 5 + Mockito (test scope)
+- `h2` — In-memory database (runtime scope)
