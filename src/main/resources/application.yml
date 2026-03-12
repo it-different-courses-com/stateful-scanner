@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: statefulscanner
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.statefulscanner: DEBUG
+
