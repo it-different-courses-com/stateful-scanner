@@ -27,6 +27,6 @@
 
     <!-- File-level checks -->
     <module name="NewlineAtEndOfFile">
-        <property name="lineSeparator" value="lf_cr_lf"/>
+        <property name="lineSeparator" value="lf_cr_crlf"/>
     </module>
 </module>
