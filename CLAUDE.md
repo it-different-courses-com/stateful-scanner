@@ -32,9 +32,24 @@ Spring Boot 4.0.3 web application using Java 25 (LTS). Standalone project with i
 - Spring Boot 4.x conventions (constructor injection, `@RestController`, `application.yml`)
 - H2 in-memory database for development (runtime scope)
 
+## Architecture
+
+```
+com.statefulscanner/
+├── StatefulScannerApplication.java   # Entry point
+├── config/
+│   └── ExecutorConfig.java           # Virtual thread executor bean + graceful shutdown
+└── health/
+    └── VirtualThreadHealthIndicator.java  # Executor health probe (submit task, verify completion)
+```
+
+**Concurrency model:** Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor bean shared across the app. Graceful shutdown with 30-second timeout in `@PreDestroy`. Avoid `synchronized` blocks — use `java.util.concurrent` structures to prevent virtual thread pinning.
+
+**Testing approach:** `ExecutorConfigTest` is a plain unit test (no Spring context) — instantiates `ExecutorConfig` directly. Use `@SpringBootTest` only when testing Spring wiring. AssertJ is the preferred assertion library.
+
 ## Dependencies
 
 - `spring-boot-starter-web` — Spring MVC + embedded Tomcat + Jackson
 - `spring-boot-starter-data-jpa` — Hibernate + Spring Data JPA
-- `spring-boot-starter-test` — JUnit 5 + Mockito (test scope)
+- `spring-boot-starter-test` — JUnit 5 + Mockito + AssertJ (test scope)
 - `h2` — In-memory database (runtime scope)
