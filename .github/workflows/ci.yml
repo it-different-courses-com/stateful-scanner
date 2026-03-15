@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,23 +24,12 @@ jobs:
           java-version: '25'
           cache: 'maven'
 
-      - name: Build
-        run: ./mvnw clean compile
-
-      - name: Run tests
-        run: ./mvnw test
-
-      - name: Checkstyle lint
-        run: ./mvnw checkstyle:check
-
-      - name: Test coverage report
-        run: ./mvnw jacoco:report
-
-      - name: Package application
-        run: ./mvnw package -DskipTests
+      - name: Build, lint, test, and package
+        run: ./mvnw clean verify
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: application-jar
           path: target/*.jar
+          retention-days: 7
