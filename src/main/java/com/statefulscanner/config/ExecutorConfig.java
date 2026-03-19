@@ -16,7 +16,7 @@ public class ExecutorConfig {
     private static final Logger LOG = LoggerFactory.getLogger(ExecutorConfig.class);
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 30;
 
-    private ExecutorService executor;
+    private volatile ExecutorService executor;
 
     @Bean(destroyMethod = "")
     public ExecutorService virtualThreadExecutor() {

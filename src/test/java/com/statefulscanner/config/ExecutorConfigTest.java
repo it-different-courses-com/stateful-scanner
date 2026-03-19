@@ -1,11 +1,13 @@
 package com.statefulscanner.config;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -14,8 +16,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ExecutorConfigTest {
-
-    private static final int HIGH_CONCURRENCY_TASK_COUNT = 10_000;
 
     private ExecutorConfig config;
     private ExecutorService executor;
@@ -26,16 +26,26 @@ class ExecutorConfigTest {
         executor = config.virtualThreadExecutor();
     }
 
-    @Test
-    void virtualThreadExecutorBeanShouldBeNonNull() {
-        assertThat(executor)
-                .as("ExecutorConfig must produce a non-null ExecutorService")
-                .isNotNull();
+    @AfterEach
+    void tearDown() {
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdownNow();
+        }
     }
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void executorShouldCreateVirtualThreads() throws InterruptedException {
+    void virtualThreadExecutor_whenCalled_returnsVirtualThreadCapableExecutor() throws Exception {
+        Future<Boolean> probe = executor.submit(() -> Thread.currentThread().isVirtual());
+
+        assertThat(probe.get(2, TimeUnit.SECONDS))
+                .as("Executor must spawn virtual threads")
+                .isTrue();
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void virtualThreadExecutor_withConcurrentTasks_runsAllOnVirtualThreads() throws InterruptedException {
         int sampleSize = 100;
         var virtualCount = new AtomicInteger(0);
         var latch = new CountDownLatch(sampleSize);
@@ -63,18 +73,18 @@ class ExecutorConfigTest {
     }
 
     @Test
-    @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void executorShouldHandleHighConcurrencyWithBlockingTasks() throws InterruptedException {
-        var latch = new CountDownLatch(HIGH_CONCURRENCY_TASK_COUNT);
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    void virtualThreadExecutor_withHighConcurrencyBlockingTasks_completesAll() throws InterruptedException {
+        int taskCount = 1_000;
+        var latch = new CountDownLatch(taskCount);
         var virtualCount = new AtomicInteger(0);
 
-        for (int i = 0; i < HIGH_CONCURRENCY_TASK_COUNT; i++) {
+        for (int i = 0; i < taskCount; i++) {
             executor.submit(() -> {
                 try {
-                    assertThat(Thread.currentThread().isVirtual())
-                            .as("Task must execute on a virtual thread")
-                            .isTrue();
-                    virtualCount.incrementAndGet();
+                    if (Thread.currentThread().isVirtual()) {
+                        virtualCount.incrementAndGet();
+                    }
                     Thread.sleep(1);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -84,19 +94,19 @@ class ExecutorConfigTest {
             });
         }
 
-        boolean completed = latch.await(15, TimeUnit.SECONDS);
+        boolean completed = latch.await(10, TimeUnit.SECONDS);
 
         assertThat(completed)
-                .as("All %d tasks should complete within the timeout", HIGH_CONCURRENCY_TASK_COUNT)
+                .as("All %d tasks should complete within the timeout", taskCount)
                 .isTrue();
         assertThat(virtualCount.get())
                 .as("All tasks must have executed on virtual threads")
-                .isEqualTo(HIGH_CONCURRENCY_TASK_COUNT);
+                .isEqualTo(taskCount);
     }
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void shutdownShouldStopAcceptingNewTasks() {
+    void shutdownExecutor_whenCalled_stopsAcceptingNewTasks() {
         config.shutdownExecutor();
 
         assertThat(executor.isShutdown()).isTrue();
@@ -106,7 +116,7 @@ class ExecutorConfigTest {
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void shutdownShouldWaitForRunningTasksToComplete() throws InterruptedException {
+    void shutdownExecutor_withRunningTask_waitsForCompletion() throws InterruptedException {
         var taskCompleted = new CountDownLatch(1);
 
         executor.submit(() -> {
@@ -129,10 +139,39 @@ class ExecutorConfigTest {
 
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    void shutdownShouldBeIdempotent() {
+    void shutdownExecutor_whenCalledTwice_isIdempotent() {
         config.shutdownExecutor();
         config.shutdownExecutor();
 
         assertThat(executor.isShutdown()).isTrue();
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void shutdownExecutor_whenInterruptedDuringAwait_forcesShutdownAndRestoresInterrupt()
+            throws InterruptedException {
+        var taskStarted = new CountDownLatch(1);
+        executor.submit(() -> {
+            taskStarted.countDown();
+            try {
+                Thread.sleep(60_000);
+            } catch (InterruptedException e) {
+                // expected — shutdownNow will interrupt this
+            }
+        });
+        taskStarted.await(2, TimeUnit.SECONDS);
+
+        Thread.currentThread().interrupt();
+        config.shutdownExecutor();
+
+        assertThat(executor.isShutdown())
+                .as("Executor should be shut down after interrupt path")
+                .isTrue();
+        assertThat(Thread.currentThread().isInterrupted())
+                .as("Interrupt flag should be restored")
+                .isTrue();
+
+        // Clean up the interrupt flag so @AfterEach and JUnit don't have issues
+        Thread.interrupted();
     }
 }

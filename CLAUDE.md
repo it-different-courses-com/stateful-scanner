@@ -40,7 +40,7 @@ com.statefulscanner/
 ├── config/
 │   └── ExecutorConfig.java           # Virtual thread executor bean + graceful shutdown
 └── health/
-    └── VirtualThreadHealthIndicator.java  # Executor health probe (submit task, verify completion)
+    └── VirtualThreadHealthIndicator.java  # HealthIndicator impl — exposed at /actuator/health
 ```
 
 **Concurrency model:** Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor bean shared across the app. Graceful shutdown with 30-second timeout in `@PreDestroy`. Avoid `synchronized` blocks — use `java.util.concurrent` structures to prevent virtual thread pinning.
@@ -51,5 +51,6 @@ com.statefulscanner/
 
 - `spring-boot-starter-web` — Spring MVC + embedded Tomcat + Jackson
 - `spring-boot-starter-data-jpa` — Hibernate + Spring Data JPA
+- `spring-boot-starter-actuator` — Health checks, metrics, `/actuator/health` endpoint
 - `spring-boot-starter-test` — JUnit 5 + Mockito + AssertJ (test scope)
 - `h2` — In-memory database (runtime scope)
