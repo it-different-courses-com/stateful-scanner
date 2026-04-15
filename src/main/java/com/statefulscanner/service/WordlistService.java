@@ -32,18 +32,8 @@ public class WordlistService {
      * @throws IOException if the file cannot be opened or read
      * @throws IllegalArgumentException if the path does not point to a readable file
      */
-    public Stream<String> readWordlist(Path filePath) throws IOException {
-        return readWordlist(filePath, false);
-    }
-
-    /** Convenience overload accepting a {@code String} path. */
     public Stream<String> readWordlist(String filePath) throws IOException {
-        return readWordlist(Path.of(filePath), false);
-    }
-
-    /** Convenience overload accepting a {@code String} path with duplicate control. */
-    public Stream<String> readWordlist(String filePath, boolean removeDuplicates) throws IOException {
-        return readWordlist(Path.of(filePath), removeDuplicates);
+        return readWordlist(filePath, false);
     }
 
     /**
@@ -56,22 +46,23 @@ public class WordlistService {
      * @throws IOException if the file cannot be opened or read
      * @throws IllegalArgumentException if the path does not point to a readable file
      */
-    public Stream<String> readWordlist(Path filePath, boolean removeDuplicates) throws IOException {
+    public Stream<String> readWordlist(String filePath, boolean removeDuplicates) throws IOException {
         Objects.requireNonNull(filePath, "filePath must not be null");
+        Path path = Path.of(filePath);
 
-        if (!Files.exists(filePath)) {
+        if (!Files.exists(path)) {
             throw new IllegalArgumentException("Wordlist file not found: " + filePath);
         }
-        if (Files.isDirectory(filePath)) {
+        if (Files.isDirectory(path)) {
             throw new IllegalArgumentException("Path is a directory, not a file: " + filePath);
         }
-        if (!Files.isReadable(filePath)) {
+        if (!Files.isReadable(path)) {
             throw new IllegalArgumentException("Wordlist file not readable: " + filePath);
         }
 
         BufferedReader reader;
         try {
-            reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8);
+            reader = Files.newBufferedReader(path, StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IOException("Failed to open wordlist file: " + filePath, e);
         }
@@ -107,56 +98,14 @@ public class WordlistService {
      * @throws IllegalArgumentException if columnIndex is negative or file is invalid
      */
     public Stream<String> readWordlistFromCsv(String filePath, int columnIndex) throws IOException {
-        return readWordlistFromCsv(Path.of(filePath), columnIndex);
-    }
-
-    /**
-     * Reads a CSV wordlist file, extracting entries from a specific column.
-     *
-     * @param filePath    path to the CSV wordlist file
-     * @param columnIndex zero-based index of the column to extract
-     * @return a stream of entries from the specified column; the caller must close the stream
-     * @throws IOException if the file cannot be opened or read
-     * @throws IllegalArgumentException if columnIndex is negative or file is invalid
-     */
-    public Stream<String> readWordlistFromCsv(Path filePath, int columnIndex) throws IOException {
-        Objects.requireNonNull(filePath, "filePath must not be null");
         if (columnIndex < 0) {
             throw new IllegalArgumentException("columnIndex must not be negative: " + columnIndex);
         }
 
-        if (!Files.exists(filePath)) {
-            throw new IllegalArgumentException("Wordlist file not found: " + filePath);
-        }
-        if (Files.isDirectory(filePath)) {
-            throw new IllegalArgumentException("Path is a directory, not a file: " + filePath);
-        }
-        if (!Files.isReadable(filePath)) {
-            throw new IllegalArgumentException("Wordlist file not readable: " + filePath);
-        }
-
-        BufferedReader reader;
-        try {
-            reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new IOException("Failed to open wordlist file: " + filePath, e);
-        }
-
-        Stream<String> stream = reader.lines()
-                .map(String::trim)
-                .filter(line -> !line.isEmpty())
-                .filter(line -> !line.startsWith("#"))
+        return readWordlist(filePath)
                 .filter(line -> line.split(",", -1).length > columnIndex)
                 .map(line -> line.split(",", -1)[columnIndex].trim())
                 .filter(value -> !value.isEmpty());
-
-        return stream.onClose(() -> {
-            try {
-                reader.close();
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to close wordlist reader", e);
-            }
-        });
     }
 
     /**
@@ -168,18 +117,6 @@ public class WordlistService {
      * @throws IOException if the file cannot be opened or read
      */
     public long countWordlistEntries(String filePath) throws IOException {
-        return countWordlistEntries(Path.of(filePath));
-    }
-
-    /**
-     * Counts the number of valid entries in a wordlist file.
-     * Blank lines and comment lines are excluded from the count.
-     *
-     * @param filePath path to the wordlist file
-     * @return the number of valid entries
-     * @throws IOException if the file cannot be opened or read
-     */
-    public long countWordlistEntries(Path filePath) throws IOException {
         try (Stream<String> stream = readWordlist(filePath)) {
             return stream.count();
         }

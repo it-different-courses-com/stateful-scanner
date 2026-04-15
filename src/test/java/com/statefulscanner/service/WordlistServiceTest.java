@@ -52,7 +52,7 @@ class WordlistServiceTest {
 
     @Test
     void readWordlist_withNullFilePath_throwsNullPointerException() {
-        assertThatThrownBy(() -> service.readWordlist((String) null))
+        assertThatThrownBy(() -> service.readWordlist(null))
                 .isInstanceOf(NullPointerException.class);
     }
 
