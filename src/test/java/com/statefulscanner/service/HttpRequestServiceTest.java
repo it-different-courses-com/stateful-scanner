@@ -46,7 +46,7 @@ class HttpRequestServiceTest {
 
         verify(httpClient).sendAsync(
                 requestMatching(request -> request.headers().firstValue("User-Agent")
-                        .orElse("").contains("StatefulScanner")),
+                        .orElse("").equals("StatefulScanner/1.0 (Security Testing Tool)")),
                 eq(HttpResponse.BodyHandlers.ofString()));
     }
 
@@ -74,7 +74,9 @@ class HttpRequestServiceTest {
         service.sendGetRequest("https://example.com").get(2, TimeUnit.SECONDS);
 
         verify(httpClient).sendAsync(
-                requestMatching(request -> request.timeout().isPresent()),
+                requestMatching(request -> request.timeout()
+                        .filter(t -> t.equals(java.time.Duration.ofSeconds(10)))
+                        .isPresent()),
                 eq(HttpResponse.BodyHandlers.ofString()));
     }
 
@@ -176,7 +178,7 @@ class HttpRequestServiceTest {
         assertThatThrownBy(() -> service.sendGetRequestWithRetry("https://example.com")
                 .join())
                 .isInstanceOf(CompletionException.class)
-                .hasCauseInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(com.statefulscanner.exception.HttpRetryExhaustedException.class)
                 .hasMessageContaining("attempts");
 
         verify(httpClient, times(4)).sendAsync(any(), any());

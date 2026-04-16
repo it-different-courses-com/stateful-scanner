@@ -2,6 +2,8 @@ package com.statefulscanner.service;
 
 import org.springframework.stereotype.Service;
 
+import com.statefulscanner.exception.HttpRetryExhaustedException;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -29,10 +31,23 @@ public class HttpRequestService {
         this.httpClient = httpClient;
     }
 
+    /**
+     * Sends an asynchronous HTTP GET request to the specified URL.
+     *
+     * @param url the target URL
+     * @return a future that completes with the HTTP response
+     */
     public CompletableFuture<HttpResponse<String>> sendGetRequest(String url) {
         return sendGetRequest(url, Map.of());
     }
 
+    /**
+     * Sends an asynchronous HTTP GET request with custom headers.
+     *
+     * @param url           the target URL
+     * @param customHeaders additional headers to include in the request
+     * @return a future that completes with the HTTP response
+     */
     public CompletableFuture<HttpResponse<String>> sendGetRequest(String url, Map<String, String> customHeaders) {
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -45,6 +60,21 @@ public class HttpRequestService {
         return httpClient.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    /**
+     * Sends an HTTP GET request with automatic retry on transport-level failures.
+     *
+     * <p><strong>Retry policy:</strong> retries only on {@link IOException} and
+     * {@link TimeoutException} (transport/connection failures). HTTP error responses
+     * (including 5xx) are returned as-is without retry — this is intentional for a
+     * scanner that needs to observe the actual server response, not mask it.
+     *
+     * <p>Up to 3 retries with exponential backoff starting at 100ms (100, 200, 400ms).
+     *
+     * @param url the target URL
+     * @return a future that completes with the HTTP response
+     * @throws HttpRetryExhaustedException (wrapped in {@link CompletionException}) if all
+     *         retry attempts are exhausted
+     */
     public CompletableFuture<HttpResponse<String>> sendGetRequestWithRetry(String url) {
         return sendGetRequestWithRetry(url, 0);
     }
@@ -59,7 +89,7 @@ public class HttpRequestService {
                         return retryAfterBackoff(url, attemptNumber);
                     }
                     return CompletableFuture.<HttpResponse<String>>failedFuture(
-                            new RuntimeException(
+                            new HttpRetryExhaustedException(
                                     "Request failed after " + (attemptNumber + 1) + " attempts",
                                     throwable));
                 })

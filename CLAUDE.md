@@ -38,9 +38,14 @@ Spring Boot 4.0.3 web application using Java 25 (LTS). Standalone project with i
 com.statefulscanner/
 ├── StatefulScannerApplication.java   # Entry point
 ├── config/
-│   └── ExecutorConfig.java           # Virtual thread executor bean + graceful shutdown
-└── health/
-    └── VirtualThreadHealthIndicator.java  # HealthIndicator impl — exposed at /actuator/health
+│   ├── ExecutorConfig.java           # Virtual thread executor bean + graceful shutdown
+│   └── HttpClientConfig.java         # java.net.http.HttpClient bean (HTTP/2, virtual threads)
+├── exception/
+│   └── HttpRetryExhaustedException.java  # Thrown when retry attempts are exhausted
+├── health/
+│   └── VirtualThreadHealthIndicator.java  # HealthIndicator impl — exposed at /actuator/health
+└── service/
+    └── HttpRequestService.java       # Async HTTP GET with retry (IOException/TimeoutException only)
 ```
 
 **Concurrency model:** Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor bean shared across the app. Graceful shutdown with 30-second timeout in `@PreDestroy`. Avoid `synchronized` blocks — use `java.util.concurrent` structures to prevent virtual thread pinning.
