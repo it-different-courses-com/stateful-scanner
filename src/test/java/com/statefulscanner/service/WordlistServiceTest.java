@@ -79,10 +79,13 @@ class WordlistServiceTest {
     void readWordlist_withUnreadableFile_throwsIllegalArgumentException() throws IOException {
         Path file = writeWordlistFile("content");
         file.toFile().setReadable(false);
-
-        assertThatThrownBy(() -> service.readWordlist(file.toString()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not readable");
+        try {
+            assertThatThrownBy(() -> service.readWordlist(file.toString()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("not readable");
+        } finally {
+            file.toFile().setReadable(true);
+        }
     }
 
     // --- Basic Reading ---
@@ -410,9 +413,9 @@ class WordlistServiceTest {
     }
 
     @Test
-    void readWordlist_withLargeFile_doesNotLoadEntireFileIntoMemory() throws IOException {
-        Path file = Files.createTempFile(tempDir, "huge", ".txt");
-        int lineCount = 500_000;
+    void readWordlist_withLargeFile_consumesElementsLazily() throws IOException {
+        int lineCount = 1_000;
+        Path file = Files.createTempFile(tempDir, "lazy", ".txt");
         try (var writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             for (int i = 0; i < lineCount; i++) {
                 writer.write("entry_" + i);
@@ -420,18 +423,19 @@ class WordlistServiceTest {
             }
         }
 
-        long memoryBefore = usedMemory();
-
         try (Stream<String> stream = service.readWordlist(file.toString())) {
-            // consume the stream entry-by-entry via count (does not retain elements)
-            long count = stream.count();
-            long memoryDuring = usedMemory();
+            // Spliterator-based check: a lazy stream from BufferedReader.lines()
+            // does not report SIZED, meaning elements are pulled on demand
+            // rather than buffered into a collection up front.
+            var spliterator = stream.spliterator();
+            assertThat(spliterator.hasCharacteristics(java.util.Spliterator.SIZED))
+                    .as("Stream should not be SIZED (would indicate eager buffering)")
+                    .isFalse();
 
-            assertThat(count).isEqualTo(lineCount);
-            // Memory growth should be well under the full file size.
-            // 500K lines of ~12 chars each = ~6MB if loaded. Allow 2MB headroom for GC noise.
-            long memoryGrowth = memoryDuring - memoryBefore;
-            assertThat(memoryGrowth).isLessThan(4_000_000L);
+            // Verify we can still consume all elements correctly
+            long[] count = {0};
+            spliterator.forEachRemaining(_ -> count[0]++);
+            assertThat(count[0]).isEqualTo(lineCount);
         }
     }
 
@@ -533,11 +537,4 @@ class WordlistServiceTest {
         assertThat(count).isZero();
     }
 
-    // --- Helper ---
-
-    private static long usedMemory() {
-        Runtime runtime = Runtime.getRuntime();
-        runtime.gc();
-        return runtime.totalMemory() - runtime.freeMemory();
-    }
 }

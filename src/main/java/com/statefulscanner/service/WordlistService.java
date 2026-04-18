@@ -18,6 +18,10 @@ import java.util.stream.Stream;
  *
  * <p>All methods that return a {@link Stream} require the caller to close the stream
  * when done (preferably via try-with-resources) to release the underlying file handle.</p>
+ *
+ * <p><strong>Security note:</strong> This service accepts caller-supplied file paths without
+ * canonical-path or path-traversal checks. It is intended for internal use only. If an endpoint
+ * ever forwards user-supplied input here, a path validation layer must be added first.</p>
  */
 @Service
 public class WordlistService {
@@ -38,6 +42,11 @@ public class WordlistService {
 
     /**
      * Reads a wordlist file with optional duplicate removal.
+     *
+     * <p><strong>Memory note:</strong> When {@code removeDuplicates} is {@code true},
+     * an in-memory {@link HashSet} retains every distinct entry for the lifetime of the
+     * stream — O(n) memory. On large wordlists (e.g. 1M+ entries) this partly defeats
+     * the streaming design. Use with caution on memory-constrained workloads.
      *
      * @param filePath         path to the wordlist file (must not be {@code null})
      * @param removeDuplicates if {@code true}, duplicate entries are suppressed
@@ -91,6 +100,9 @@ public class WordlistService {
      * Each line is split on comma and the value at {@code columnIndex} is used
      * as the entry. Lines with fewer columns than required are skipped.
      *
+     * <p><strong>Limitation:</strong> Uses simple comma-split; embedded commas
+     * and quoted values (e.g. {@code "last,first",role}) are not supported.
+     *
      * @param filePath    path to the CSV wordlist file
      * @param columnIndex zero-based index of the column to extract
      * @return a stream of entries from the specified column; the caller must close the stream
@@ -103,8 +115,9 @@ public class WordlistService {
         }
 
         return readWordlist(filePath)
-                .filter(line -> line.split(",", -1).length > columnIndex)
-                .map(line -> line.split(",", -1)[columnIndex].trim())
+                .map(line -> line.split(",", -1))
+                .filter(cols -> cols.length > columnIndex)
+                .map(cols -> cols[columnIndex].trim())
                 .filter(value -> !value.isEmpty());
     }
 
