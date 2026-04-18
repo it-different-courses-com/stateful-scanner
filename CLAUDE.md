@@ -45,7 +45,8 @@ com.statefulscanner/
 ├── health/
 │   └── VirtualThreadHealthIndicator.java  # HealthIndicator impl — exposed at /actuator/health
 └── service/
-    └── HttpRequestService.java       # Async HTTP GET with retry (IOException/TimeoutException only)
+    ├── HttpRequestService.java       # Async HTTP GET with retry (IOException/TimeoutException only)
+    └── WordlistService.java          # Streaming wordlist file reader with dedup and CSV support
 ```
 
 **Concurrency model:** Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor bean shared across the app. Graceful shutdown with 30-second timeout in `@PreDestroy`. Avoid `synchronized` blocks — use `java.util.concurrent` structures to prevent virtual thread pinning.
