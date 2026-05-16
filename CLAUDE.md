@@ -81,6 +81,8 @@ filepath ──► WordlistService ──► Stream<String>
 
 `ScanRequest` is the unit of work that flows from URL generation through the queue to HTTP execution. `RequestQueue` is the only stateful coordination primitive in the pipeline — everything else is a stateless transformation. Classes in `core/` are deliberately **not** Spring beans: their lifetime and parameters (base URL, queue capacity) are scan-specific, so an orchestrator service constructs them per scan instead.
 
+**Not yet wired:** the orchestrator that drives this pipeline per scan — pumping wordlist entries through `UrlGenerator.generateRequests(Stream<String>)` into `RequestQueue`, then draining the queue (`dequeue` / `drainTo`) into `HttpRequestService` — does not exist yet. Today each stage is built and tested in isolation; nothing composes them end to end.
+
 ### Concurrency model
 
 Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor bean is shared across the app, with a 30-second graceful-shutdown window in `@PreDestroy`. **Avoid `synchronized` blocks** — use `java.util.concurrent` structures (`LinkedBlockingQueue`, `ReentrantLock`-backed primitives) so blocking calls unmount carrier threads instead of pinning them.

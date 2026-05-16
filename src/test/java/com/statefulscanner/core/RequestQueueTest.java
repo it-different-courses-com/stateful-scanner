@@ -217,6 +217,22 @@ class RequestQueueTest {
         }
 
         @Test
+        void tryEnqueueWithTimeout_overflowingDuration_isClampedNotRejected() throws Exception {
+            // toNanosClamped: Duration.toNanos() throws ArithmeticException for any
+            // duration beyond ~292 years; the catch branch clamps to Long.MAX_VALUE
+            // nanos instead of letting that exception escape tryEnqueue. Note we use
+            // ofSeconds, not ofDays(Long.MAX_VALUE) — the latter overflows inside
+            // ofDays() itself, before toNanos() is ever reached. Exercised on a queue
+            // WITH space so offer() returns at once; the class @Timeout proves we did
+            // not actually wait out the clamp.
+            RequestQueue queue = new RequestQueue(1);
+
+            assertThat(queue.tryEnqueue(sample("a"), Duration.ofSeconds(Long.MAX_VALUE)))
+                    .isTrue();
+            assertThat(queue.size()).isEqualTo(1);
+        }
+
+        @Test
         void tryDequeue_returnsNullWhenEmptyAndTimeoutElapses() throws Exception {
             RequestQueue queue = new RequestQueue(1);
 
@@ -255,6 +271,18 @@ class RequestQueueTest {
 
             assertThat(queue.tryDequeue(Duration.ZERO)).isEqualTo(a);
         }
+
+        @Test
+        void tryDequeue_overflowingDuration_isClampedNotRejected() throws Exception {
+            // Dequeue-side mirror of the tryEnqueue clamp test: a timeout so large
+            // it overflows toNanos() is clamped rather than throwing, and on a
+            // non-empty queue poll() returns the head immediately.
+            RequestQueue queue = new RequestQueue(1);
+            ScanRequest a = sample("a");
+            queue.enqueue(a);
+
+            assertThat(queue.tryDequeue(Duration.ofSeconds(Long.MAX_VALUE))).isEqualTo(a);
+        }
     }
 
     @Nested
@@ -286,6 +314,38 @@ class RequestQueueTest {
             assertThat(queue.dequeue().wordlistEntry()).isEqualTo("first");
             // Unblocked: producer should now finish promptly.
             producer.get(1, TimeUnit.SECONDS);
+            assertThat(queue.size()).isEqualTo(1);
+            assertThat(queue.dequeue().wordlistEntry()).isEqualTo("second");
+        }
+
+        @Test
+        void tryEnqueueWithTimeout_blocksWhenFull_succeedsAfterDequeue() throws Exception {
+            // The fail-after-block path (timeout elapses -> false) is covered in
+            // NonBlockingOps; this covers the success-after-block path: the bounded
+            // wait parks on a full queue, then completes with true once a consumer
+            // frees a slot before the timeout.
+            RequestQueue queue = new RequestQueue(1);
+            queue.enqueue(sample("first"));
+
+            executor = Executors.newVirtualThreadPerTaskExecutor();
+            CountDownLatch started = new CountDownLatch(1);
+
+            // A generous timeout that cannot realistically elapse mid-test, so the
+            // only way this returns true is the space-freed path — not a
+            // timeout-then-retry fluke. The class-level @Timeout still caps the test.
+            Future<Boolean> producer = executor.submit(() -> {
+                started.countDown();
+                return queue.tryEnqueue(sample("second"), Duration.ofSeconds(30));
+            });
+
+            started.await();
+            // Confirm the producer is genuinely parked in offer() on the full queue.
+            assertStillBlocked(producer);
+
+            // Free a slot; the blocked tryEnqueue must now complete with true.
+            assertThat(queue.dequeue().wordlistEntry()).isEqualTo("first");
+
+            assertThat(producer.get(1, TimeUnit.SECONDS)).isTrue();
             assertThat(queue.size()).isEqualTo(1);
             assertThat(queue.dequeue().wordlistEntry()).isEqualTo("second");
         }

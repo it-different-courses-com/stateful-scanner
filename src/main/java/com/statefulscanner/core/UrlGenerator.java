@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -38,6 +39,20 @@ import java.util.stream.Stream;
  * useful for endpoints that require a fixed query parameter (e.g. an API token)
  * but is a footgun if you intended the query/fragment to apply only to a probe
  * page. Strip them from the base URL beforehand if you need fresh probes.
+ *
+ * <p><strong>Userinfo carry-over:</strong> credentials embedded in the base URL
+ * ({@code https://user:pw@host}) are likewise preserved and forwarded on
+ * <em>every</em> generated URL — they are sent to every probed path, not just the
+ * base probe. Strip userinfo from the base URL if that is not intended.
+ *
+ * <h2>Destination filtering — none (SSRF surface)</h2>
+ * This class applies <strong>no</strong> filtering to the target host. A base URL
+ * pointing at a loopback address ({@code 127.0.0.1}), an RFC 1918 private range,
+ * link-local space, or a cloud metadata endpoint ({@code 169.254.169.254}) is
+ * accepted and turned into requests like any other host. For an authorized
+ * internal scan that is intended; but when a base URL can originate from an
+ * untrusted source, the caller is responsible for allow-listing or rejecting such
+ * destinations — {@code UrlGenerator} performs no such checks itself.
  *
  * <h2>Normalization &amp; encoding</h2>
  * Generated URLs are produced via the multi-argument {@link URI} constructor,
@@ -75,6 +90,14 @@ public final class UrlGenerator {
     public static final int MAX_URL_LENGTH = 8192;
 
     private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
+
+    /**
+     * Pre-compiled matcher for runs of two or more slashes. Compiled once and
+     * reused: {@link String#replaceAll(String, String)} recompiles its regex on
+     * every call, which is wasteful on the per-entry hot path that processes a
+     * whole wordlist.
+     */
+    private static final Pattern SLASH_RUN = Pattern.compile("/{2,}");
 
     private final URI baseUri;
     private final String pattern;
@@ -259,6 +282,6 @@ public final class UrlGenerator {
     }
 
     private static String collapseSlashes(String path) {
-        return path.replaceAll("/{2,}", "/");
+        return SLASH_RUN.matcher(path).replaceAll("/");
     }
 }
