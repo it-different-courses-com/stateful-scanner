@@ -47,7 +47,9 @@ com.statefulscanner/
 ├── StatefulScannerApplication.java   # Entry point
 ├── config/
 │   ├── ExecutorConfig.java           # Virtual thread executor bean + graceful shutdown
-│   └── HttpClientConfig.java         # java.net.http.HttpClient bean (HTTP/2, virtual threads)
+│   ├── HttpClientConfig.java         # java.net.http.HttpClient bean (HTTP/2, virtual threads)
+│   ├── RateLimiterProperties.java    # @ConfigurationProperties record bound to scanner.rate-limiter.* (range [1, 10000], finite-only)
+│   └── RateLimiterConfig.java        # Builds the Guava RateLimiter bean (smooth-bursty, or smooth-warming-up when warmupPeriodSeconds > 0)
 ├── core/
 │   ├── UrlGenerator.java             # Combine base URL + wordlist entry → absolute URL
 │   └── RequestQueue.java             # Bounded BlockingQueue<ScanRequest> with backpressure
@@ -59,6 +61,7 @@ com.statefulscanner/
 │   └── VirtualThreadHealthIndicator.java  # HealthIndicator impl — exposed at /actuator/health
 └── service/
     ├── HttpRequestService.java       # Async HTTP GET with retry (IOException/TimeoutException only)
+    ├── RateLimiterService.java       # Wraps Guava RateLimiter — hides @Beta type, validates inputs, exposes acquire/tryAcquire/setRate
     └── WordlistService.java          # Streaming wordlist file reader with dedup and CSV support
 ```
 
@@ -87,10 +90,15 @@ filepath ──► WordlistService ──► Stream<String>
 
 Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor bean is shared across the app, with a 30-second graceful-shutdown window in `@PreDestroy`. **Avoid `synchronized` blocks** — use `java.util.concurrent` structures (`LinkedBlockingQueue`, `ReentrantLock`-backed primitives) so blocking calls unmount carrier threads instead of pinning them.
 
+### Rate limiting
+
+`--rate=N` CLI shorthand maps to `scanner.rate-limiter.permits-per-second` via a `${rate:100.0}` placeholder in `application.yml`; `--rate-warmup=N` likewise maps to `scanner.rate-limiter.warmup-period-seconds` via `${rate-warmup:0.0}` (cold-start ramp window in seconds; `0` disables warmup). Range is enforced in `RateLimiterProperties`'s canonical constructor (1–10000, finite-only). Guava's `RateLimiter` is `@Beta` — keep all references to the type confined to `RateLimiterConfig` and `RateLimiterService` so it can be swapped (e.g. for Resilience4j) without touching callers.
+
 ## Testing
 
 - **Plain unit vs. Spring test:** instantiate classes directly when testing logic. `ExecutorConfigTest` is a plain unit test (no Spring context). Use `@SpringBootTest` only when verifying Spring wiring.
 - **AssertJ** is the preferred assertion library.
+- **Mocking final/abstract classes:** tests that mock final or abstract classes (e.g. Guava `RateLimiter`) use `@ExtendWith(MockitoExtension.class)` + `@Mock`. The Surefire `argLine` in `pom.xml` loads `byte-buddy-agent` as a `-javaagent` so Mockito does not self-attach (silences the JDK 25 dynamic-agent warning).
 - **Class-level `@Timeout(5, TimeUnit.SECONDS)`** is the project convention — caps any hung test.
 - **`@Nested` groups** organize related cases inside large test classes (see `UrlGeneratorTest`, `RequestQueueTest`).
 - **`@AfterEach` cleanup** for any closeable resource the test opens (streams, executors). Tests that leak `ExecutorService` instances cause flaky teardown.
@@ -102,5 +110,7 @@ Virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. One executor 
 - `spring-boot-starter-data-jpa` — Hibernate + Spring Data JPA
 - `spring-boot-starter-actuator` — Health checks, metrics, `/actuator/health` endpoint
 - `spring-boot-starter-test` — JUnit 5 + Mockito + AssertJ (test scope)
+- `byte-buddy-agent` — Loaded as `-javaagent` by Surefire so Mockito can mock abstract/final classes without self-attaching (test scope)
+- `guava` (`33.0.0-jre`) — Provides `RateLimiter` for request pacing
 - `h2` — In-memory database (runtime scope)
 - Maven plugins: `maven-checkstyle-plugin` (validate phase), `jacoco-maven-plugin` (test phase coverage report)
