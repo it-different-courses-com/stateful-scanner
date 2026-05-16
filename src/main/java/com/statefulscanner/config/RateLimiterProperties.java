@@ -12,6 +12,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * {@code --rate=500} and {@code --scanner.rate-limiter.permits-per-second=500}
  * select the same setting.
  *
+ * <p><strong>Bound asymmetry:</strong> the {@code [1, 10000]} range checked by
+ * this record's canonical constructor constrains <em>startup</em> configuration
+ * only. The runtime
+ * {@link com.statefulscanner.service.RateLimiterService#setRate(double)} path
+ * intentionally accepts any positive, finite rate so adaptive throttling can move
+ * outside this range in response to target behaviour. That looser runtime bound
+ * is by design — do not tighten it to match.
+ *
  * @param permitsPerSecond     target steady-state request rate.
  *                             Must be in [1, 10000]; defaults to 100.
  * @param warmupPeriodSeconds  cold-start ramp-up window. {@code 0} disables warmup

@@ -60,6 +60,10 @@ class RateLimiterConfigTest {
         assertThat(first).isNotSameAs(second);
     }
 
+    // The next two tests assert on Guava's internal limiter class names
+    // (SmoothBursty / SmoothWarmingUp). The coupling is deliberate: both modes
+    // report the same getRate(), so the class name is the only observable signal
+    // that RateLimiterConfig selected the correct branch for the warmup setting.
     @Test
     void rateLimiter_withZeroWarmup_returnsBurstyLimiterImplementation() {
         var props = new RateLimiterProperties(500.0, 0.0);

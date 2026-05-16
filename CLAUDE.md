@@ -56,7 +56,7 @@ com.statefulscanner/
 
 **Testing approach:** `ExecutorConfigTest` is a plain unit test (no Spring context) — instantiates `ExecutorConfig` directly. Use `@SpringBootTest` only when testing Spring wiring. AssertJ is the preferred assertion library. Tests that mock final or abstract classes (e.g. Guava `RateLimiter`) use `@ExtendWith(MockitoExtension.class)` + `@Mock`; the Surefire `argLine` in `pom.xml` loads `byte-buddy-agent` as a `-javaagent` so Mockito does not self-attach (silences the JDK 25 dynamic-agent warning).
 
-**Rate limiting:** `--rate=N` CLI shorthand maps to `scanner.rate-limiter.permits-per-second` via a `${rate:100.0}` placeholder in `application.yml`. Range is enforced in `RateLimiterProperties`'s canonical constructor (1–10000, finite-only). Guava's `RateLimiter` is `@Beta` — keep all references to the type confined to `RateLimiterConfig` and `RateLimiterService` so it can be swapped (e.g. for Resilience4j) without touching callers.
+**Rate limiting:** `--rate=N` CLI shorthand maps to `scanner.rate-limiter.permits-per-second` via a `${rate:100.0}` placeholder in `application.yml`; `--rate-warmup=N` likewise maps to `scanner.rate-limiter.warmup-period-seconds` via `${rate-warmup:0.0}` (cold-start ramp window in seconds; `0` disables warmup). Range is enforced in `RateLimiterProperties`'s canonical constructor (1–10000, finite-only). Guava's `RateLimiter` is `@Beta` — keep all references to the type confined to `RateLimiterConfig` and `RateLimiterService` so it can be swapped (e.g. for Resilience4j) without touching callers.
 
 ## Dependencies
 
